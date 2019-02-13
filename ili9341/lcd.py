@@ -86,8 +86,12 @@ from time import sleep
 
 from machine import SPI, Pin
 
-from colors import *
-from constants import *
+try:
+    from ili9341.colors import *
+    from ili9341.constants import *
+except ImportError:
+    from colors import *
+    from constants import *
 
 micropython.alloc_emergency_exception_buf(100)
 
@@ -110,7 +114,7 @@ class ILI(object):
     def __init__(self, cs = '22', dc = '21', rst = None, bl = None,
                 port = VSPI, baud = DEFAULT_BAUDRATE, portrait = True):
         """ Initialize ILI class. """
-        if cs is None or dc os None:
+        if cs is None or dc is None:
             raise RuntimeError('cs and dc pins must not be None')
         if port not in [HSPI, VSPI]:
             raise RuntimeError('port must be HSPI or VSPI')
@@ -137,7 +141,7 @@ class ILI(object):
 
         self._gcCollect()
 
-    @micropython.viper
+    #@micropython.viper
     def reset(self):
         """ Reset the Screen. """
         if self.rstPin is not None:     # Reset Pin is Connected to ESP32
@@ -145,14 +149,16 @@ class ILI(object):
             sleep(0.01)
             self.rstPin.on()
             return
-        
+
+        self._write_cmd(SWRESET)
+        sleep(0.05)
         
 
-    @micropython.viper
+    #@micropython.viper
     def _gcCollect(self):
         collect()
 
-    @micropython.viper
+    #@micropython.viper
     def setDimensions(self):
         if ILI.portrait:
             self.curHeight = TFTHEIGHT
@@ -162,7 +168,7 @@ class ILI(object):
             self.curWidth  = TFTHEIGHT
         self._graph_orientation()
 
-    @micropython.viper
+    #@micropython.viper
     def _initILI(self):
         self._write_cmd(LCDOFF)                     # Display OFF
         sleep(0.01)
@@ -236,7 +242,7 @@ class ILI(object):
         words = pack(fmt, *words)
         self._write_data(words)
 
-    @micropython.viper
+    #@micropython.viper
     def _graph_orientation(self):
         self._write_cmd(MADCTL)   # Memory Access Control
         # Portrait:
@@ -246,7 +252,7 @@ class ILI(object):
         data = 0x48 if self._portrait else 0x28
         self._write_data(data)
 
-    @micropython.viper
+    #@micropython.viper
     def _char_orientation(self):
         self._write_cmd(MADCTL)   # Memory Access Control
         # Portrait:
@@ -256,7 +262,7 @@ class ILI(object):
         data = 0xE8 if self._portrait else 0x58
         self._write_data(data)
 
-    @micropython.viper
+    #@micropython.viper
     def _image_orientation(self):
         self._write_cmd(MADCTL)   # Memory Access Control
         # Portrait:
@@ -306,7 +312,10 @@ class ILI(object):
     @portrait.setter
     def portrait(self, portr):
         if not isinstance(portr, bool):
-            from exceptions import PortraitBoolError
+            try:
+                from ili9341.exceptions import PortraitBoolError
+            except ImportError:
+                from exceptions import PortraitBoolError
             raise PortraitBoolError
         self._portrait = portr
         self.setDimensions()
@@ -486,25 +495,31 @@ class BaseChars(ILI, BaseDraw):
         super(BaseChars, self).__init__(**kwargs)
         self.fontColor = color
         if font is not None:
-            import fonts
+            try:
+                from ili9341 import fonts
+            except ImportError:
+                import fonts
             self._gcCollect()
             font = fonts.importing(font)
             self._font = font
             del(fonts)
         else:
-            from exceptions import NoneTypeFont
+            try:
+                from ili9341.exceptions import NoneTypeFont
+            except ImportError:
+                from exceptions import NoneTypeFont
             raise NoneTypeFont
         self.bgcolor = bgcolor if bgcolor is None else self._get_Npix_monoword(bgcolor)
         self._fontscale = scale
 
 
     @staticmethod
-    @micropython.asm_thumb
+    #@micropython.asm_thumb
     def _asm_get_charpos(r0, r1, r2):
         mul(r0, r1)
         adc(r0, r2)
 
-    @micropython.viper
+    #@micropython.viper
     def _get_bgcolor(self, x, y):
         self._set_window(x, x, y, y)
         data = self._write_cmd(RAMRD, read = True)
@@ -577,7 +592,7 @@ class BaseImages(ILI):
 
     # solution from forum.micropython.org
     @staticmethod
-    @micropython.asm_thumb
+    #@micropython.asm_thumb
     def _reverse(r0, r1):
         b(loopend)
         label(loopstart)
@@ -590,11 +605,14 @@ class BaseImages(ILI):
         sub(r1, 2)
         bpl(loopstart)
 
-    @micropython.viper
+    #@micropython.viper
     def _set_image_headers(self, f):
         headers = []
         if f.read(2) != b'BM':
-            from exceptions import BMPvalidationError
+            try:
+                from ili9341.exceptions import BMPvalidationError
+            except ImportError:
+                from exceptions import BMPvalidationError
             raise BMPvalidationError
         for pos in (10, 18, 22):                # startbit, width, height
             f.seek(pos)
@@ -739,7 +757,10 @@ class Chars(BaseChars):
 
     @font.setter
     def font(self, font):
-        import fonts
+        try:
+            from ili9341 import fonts
+        except ImportError:
+            import fonts
         font = fonts.importing(font)
         self._font = font
         del(fonts)
@@ -755,7 +776,10 @@ class Chars(BaseChars):
     @portrait.setter
     def portrait(self, portr):
         if not isinstance(portr, bool):
-            from exceptions import PortraitBoolError
+            try:
+                from ili9341.exceptions import PortraitBoolError
+            except ImportError:
+                from exceptions import PortraitBoolError
             raise PortraitBoolError
         self._portrait = portr
         self.setDimensions()
@@ -779,7 +803,7 @@ class BaseWidgets(BaseDraw, BaseImages):
         # compute widget width
         return width + 20 + self._border * 2
 
-    @micropython.viper
+    #@micropython.viper
     def _get_strW(self, string):
         # getting current string length
         return sum(map(self._charwidth_mapper, string))
@@ -847,7 +871,10 @@ class BaseWidgets(BaseDraw, BaseImages):
     def _widget(self, x, y, color, infill, string, width = None,
                 height = None, strobj = None, border = 1):
         if strobj is None:
-            from exceptions import NoneStringObject
+            try:
+                from ili9341.exceptions import NoneStringObject
+            except ImportError:
+                from exceptions import NoneStringObject
             raise NoneStringObject
         border = 10 if border > 10 else border
         self._blank = '(..)'
@@ -943,7 +970,10 @@ class LCD(Widgets):
     @portrait.setter
     def portrait(self, portr):
         if not isinstance(portr, bool):
-            from exceptions import PortraitBoolError
+            try:
+                from ili9341.exceptions import PortraitBoolError
+            except ImportError:
+                from exceptions import PortraitBoolError
             raise PortraitBoolError
         self._portrait = portr
         self.setDimensions()
